@@ -7,7 +7,9 @@ import {
     Switch,
     ToggleButtonGroup,
     ToggleButton,
-    Paper
+    Paper,
+    IconButton,
+    Tooltip
 } from '@mui/material';
 import {
     Analytics as AnalyticsIcon,
@@ -15,9 +17,16 @@ import {
     Brightness7 as LightIcon,
     RocketLaunch as SimpleIcon,
     Science as AdvancedIcon,
+    ChatBubbleOutline as ChatIcon
 } from '@mui/icons-material';
 
-const AppHeader = ({ themeMode, toggleTheme, experienceMode, onModeChange }) => {
+const AppHeader = ({
+    themeMode,
+    toggleTheme,
+    experienceMode,
+    onModeChange,
+    onOpenChat
+}) => {
     return (
         <AppBar
             position="sticky"
@@ -95,6 +104,28 @@ const AppHeader = ({ themeMode, toggleTheme, experienceMode, onModeChange }) => 
                         />
                         <DarkIcon sx={{ fontSize: 18, opacity: themeMode === 'dark' ? 1 : 0.4 }} />
                     </Box>
+
+                    {onOpenChat && (
+                        <Tooltip title="Open Chat Assistant">
+                            <IconButton
+                                color="primary"
+                                onClick={onOpenChat}
+                                sx={{
+                                    backgroundColor: (theme) =>
+                                        theme.palette.mode === 'light'
+                                            ? 'rgba(25,118,210,0.1)'
+                                            : 'rgba(144,202,249,0.12)',
+                                    borderRadius: 2,
+                                    transition: 'transform 0.2s ease',
+                                    '&:hover': {
+                                        transform: 'translateY(-1px)'
+                                    }
+                                }}
+                            >
+                                <ChatIcon />
+                            </IconButton>
+                        </Tooltip>
+                    )}
                 </Box>
             </Toolbar>
         </AppBar>

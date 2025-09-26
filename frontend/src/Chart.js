@@ -6,7 +6,8 @@ import {
     DesignTab, 
     ViewTab, 
     AnalyticsTab,
-    SimpleMode 
+    SimpleMode,
+    ChatTab
 } from './components';
 import { TABS, ENDPOINTS, MESSAGES } from './constants/appConstants';
 import useDataManager from './hooks/useDataManager';
@@ -26,6 +27,12 @@ const Chart = ({ themeMode, toggleTheme }) => {
     } = useDataManager();
 
     const [experienceMode, setExperienceMode] = useState('simple');
+    const [chatMessages, setChatMessages] = useState(() => ([
+        {
+            role: 'bot',
+            text: "Hi there! Ask me for a chart and I'll get right on it."
+        }
+    ]));
 
     useEffect(() => {
         fetchData(ENDPOINTS.DATASET);
@@ -78,6 +85,22 @@ const Chart = ({ themeMode, toggleTheme }) => {
         }
     };
 
+    const handleOpenChatTab = () => {
+        setExperienceMode('advanced');
+        setState(prev => ({ ...prev, activeTab: TABS.CHAT }));
+    };
+
+    const handleSendChatMessage = useCallback((messageText) => {
+        const trimmed = messageText.trim();
+        if (!trimmed) return;
+
+        setChatMessages(prev => ([
+            ...prev,
+            { role: 'user', text: trimmed },
+            { role: 'bot', text: 'Sure thing—let me figure out the best chart for that.' }
+        ]));
+    }, []);
+
     const handleDashboardAction = async (dashboard, action) => {
         if (action === 'view') {
             setState(prev => ({
@@ -122,6 +145,72 @@ const Chart = ({ themeMode, toggleTheme }) => {
 
     const refreshDashboards = () => {
         fetchData(ENDPOINTS.DASHBOARD);
+    };
+
+    const renderMainContent = () => {
+        if (experienceMode === 'simple') {
+            return (
+                <SimpleMode
+                    datasets={state.datasets.items}
+                    selectedDataset={state.selectedDataset}
+                    onDatasetChange={handleDatasetChange}
+                    analytics={state.analytics}
+                    gwData={state.gwData}
+                    isLoading={isLoading}
+                    onLoadDataset={loadDataset}
+                />
+            );
+        }
+
+        return (
+            <>
+                <TabNavigation
+                    activeTab={state.activeTab}
+                    onTabChange={handleTabChange}
+                />
+
+                {state.activeTab === TABS.DESIGN && (
+                    <DesignTab
+                        datasets={state.datasets.items}
+                        selectedDataset={state.selectedDataset}
+                        onDatasetChange={handleDatasetChange}
+                        gwData={state.gwData}
+                        isGraphicWalkerReady={isGraphicWalkerReady}
+                        onGraphicWalkerReady={setIsGraphicWalkerReady}
+                        isLoading={isLoading}
+                        setIsLoading={setIsLoading}
+                        onRefreshDashboards={refreshDashboards}
+                        onLoadDataset={loadDataset}
+                    />
+                )}
+
+                {state.activeTab === TABS.VIEW && (
+                    <ViewTab
+                        dashboards={state.dashboard.items}
+                        loading={state.dashboard.loading}
+                        error={state.dashboard.error}
+                        selectedDashboard={state.dashboard.selected}
+                        gwData={state.gwData}
+                        onDashboardAction={handleDashboardAction}
+                        onBackToList={resetDashboardView}
+                    />
+                )}
+
+                {state.activeTab === TABS.WIDGETS && (
+                    <AnalyticsTab
+                        analytics={state.analytics}
+                        selectedDataset={state.selectedDataset}
+                    />
+                )}
+
+                {state.activeTab === TABS.CHAT && (
+                    <ChatTab
+                        messages={chatMessages}
+                        onSendMessage={handleSendChatMessage}
+                    />
+                )}
+            </>
+        );
     };
 
     // Loading state
@@ -184,61 +273,11 @@ const Chart = ({ themeMode, toggleTheme }) => {
                 toggleTheme={toggleTheme}
                 experienceMode={experienceMode}
                 onModeChange={handleExperienceModeChange}
+                onOpenChat={handleOpenChatTab}
             />
 
             <Container maxWidth="xl" sx={{ py: 3 }}>
-                {experienceMode === 'simple' ? (
-                    <SimpleMode
-                        datasets={state.datasets.items}
-                        selectedDataset={state.selectedDataset}
-                        onDatasetChange={handleDatasetChange}
-                        analytics={state.analytics}
-                        gwData={state.gwData}
-                        isLoading={isLoading}
-                        onLoadDataset={loadDataset}
-                    />
-                ) : (
-                    <>
-                        <TabNavigation 
-                            activeTab={state.activeTab} 
-                            onTabChange={handleTabChange} 
-                        />
-
-                        {state.activeTab === TABS.DESIGN && (
-                            <DesignTab
-                                datasets={state.datasets.items}
-                                selectedDataset={state.selectedDataset}
-                                onDatasetChange={handleDatasetChange}
-                                gwData={state.gwData}
-                                isGraphicWalkerReady={isGraphicWalkerReady}
-                                onGraphicWalkerReady={setIsGraphicWalkerReady}
-                                isLoading={isLoading}
-                                setIsLoading={setIsLoading}
-                                onRefreshDashboards={refreshDashboards}
-                                onLoadDataset={loadDataset}
-                            />
-                        )}
-
-                        {state.activeTab === TABS.VIEW && (
-                            <ViewTab
-                                dashboards={state.dashboard.items}
-                                loading={state.dashboard.loading}
-                                error={state.dashboard.error}
-                                selectedDashboard={state.dashboard.selected}
-                                gwData={state.gwData}
-                                onDashboardAction={handleDashboardAction}
-                                onBackToList={resetDashboardView}
-                            />
-                        )}
-
-                        {state.activeTab === TABS.WIDGETS && (
-                            <AnalyticsTab
-                                analytics={state.analytics}
-                                selectedDataset={state.selectedDataset}
-                            />
-                        )}
-                    </>
-                )}
+                {renderMainContent()}
             </Container>
         </Box>
     );

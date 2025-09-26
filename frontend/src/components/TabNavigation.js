@@ -4,6 +4,7 @@ import {
     Dashboard as DashboardIcon,
     Visibility as ViewIcon,
     Analytics as AnalyticsIcon,
+    ChatBubbleOutline as ChatIcon
 } from '@mui/icons-material';
 import { TABS } from '../constants/appConstants';
 
@@ -46,6 +47,15 @@ const TabNavigation = ({ activeTab, onTabChange }) => {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <AnalyticsIcon />
                             Analytics Overview
+                        </Box>
+                    }
+                />
+                <Tab 
+                    value={TABS.CHAT}
+                    label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <ChatIcon />
+                            Chat Assistant
                         </Box>
                     }
                 />

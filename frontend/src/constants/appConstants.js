@@ -1,7 +1,8 @@
 export const TABS = {
     DESIGN: 'design',
     VIEW: 'view',
-    WIDGETS: 'widgets'
+    WIDGETS: 'widgets',
+    CHAT: 'chat'
 };
 
 export const ENDPOINTS = {
