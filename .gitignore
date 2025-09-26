@@ -4,7 +4,6 @@ PyGWalkerDB
 backend/**/bin/
 backend/**/obj/
 backend/**/.vs/
-backend/**/uploads/
 
 # Node.js dependencies
 frontend/node_modules/
