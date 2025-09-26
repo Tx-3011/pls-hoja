@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Box, Container, CircularProgress, Typography } from '@mui/material';
+import { GraphicRenderer } from '@kanaries/graphic-walker';
 import { 
     AppHeader, 
     TabNavigation, 
@@ -11,6 +12,7 @@ import {
 } from './components';
 import { TABS, ENDPOINTS, MESSAGES } from './constants/appConstants';
 import useDataManager from './hooks/useDataManager';
+import generateChatChart from './utils/chatRuleEngine';
 
 const Chart = ({ themeMode, toggleTheme }) => {
     const {
@@ -33,6 +35,8 @@ const Chart = ({ themeMode, toggleTheme }) => {
             text: "Hi there! Ask me for a chart and I'll get right on it."
         }
     ]));
+    const [chatPreview, setChatPreview] = useState(null);
+    const [isGeneratingChat, setIsGeneratingChat] = useState(false);
 
     useEffect(() => {
         fetchData(ENDPOINTS.DATASET);
@@ -90,15 +94,74 @@ const Chart = ({ themeMode, toggleTheme }) => {
         setState(prev => ({ ...prev, activeTab: TABS.CHAT }));
     };
 
-    const handleSendChatMessage = useCallback((messageText) => {
+    const handleSendChatMessage = useCallback(async (messageText) => {
         const trimmed = messageText.trim();
         if (!trimmed) return;
 
+        if (isGeneratingChat) {
+            return;
+        }
+
         setChatMessages(prev => ([
             ...prev,
-            { role: 'user', text: trimmed },
-            { role: 'bot', text: 'Sure thing—let me figure out the best chart for that.' }
+            { role: 'user', text: trimmed }
         ]));
+
+        setIsGeneratingChat(true);
+
+        try {
+            let gwData = state.gwData;
+            if (!gwData && state.selectedDataset) {
+                gwData = await loadDataset(state.selectedDataset);
+            }
+
+            if (!gwData) {
+                setChatMessages(prev => ([
+                    ...prev,
+                    {
+                        role: 'bot',
+                        text: 'I need a dataset loaded before I can draft a chart. Try loading one from the Design tab first.'
+                    }
+                ]));
+                return;
+            }
+
+            const result = generateChatChart(trimmed, gwData);
+
+            if (result.success) {
+                setChatPreview(result.chart);
+                setChatMessages(prev => ([
+                    ...prev,
+                    { role: 'bot', text: result.explanation }
+                ]));
+            } else {
+                setChatMessages(prev => ([
+                    ...prev,
+                    { role: 'bot', text: result.message }
+                ]));
+            }
+        } catch (error) {
+            console.error('Failed to generate chat chart:', error);
+            setChatMessages(prev => ([
+                ...prev,
+                {
+                    role: 'bot',
+                    text: "Something went wrong while I was building that chart. Please try again or tweak the request."
+                }
+            ]));
+        } finally {
+            setIsGeneratingChat(false);
+        }
+    }, [isGeneratingChat, state.gwData, state.selectedDataset, loadDataset]);
+
+    const handleResetChat = useCallback(() => {
+        setChatPreview(null);
+        setChatMessages([
+            {
+                role: 'bot',
+                text: "Hi there! Ask me for a chart and I'll get right on it."
+            }
+        ]);
     }, []);
 
     const handleDashboardAction = async (dashboard, action) => {
@@ -207,7 +270,24 @@ const Chart = ({ themeMode, toggleTheme }) => {
                     <ChatTab
                         messages={chatMessages}
                         onSendMessage={handleSendChatMessage}
-                    />
+                        onReset={handleResetChat}
+                        isBusy={isGeneratingChat}
+                    >
+                        {chatPreview && state.gwData ? (
+                            <Box sx={{ width: '100%', maxWidth: '100%' }}>
+                                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
+                                    Suggested chart: {chatPreview.type === 'point' ? 'Scatter plot' : chatPreview.type.charAt(0).toUpperCase() + chatPreview.type.slice(1)}
+                                </Typography>
+                                <Box sx={{ width: '100%', height: 420 }}>
+                                    <GraphicRenderer
+                                        data={state.gwData.dataSource}
+                                        fields={state.gwData.fields}
+                                        chart={chatPreview.rendererChart}
+                                    />
+                                </Box>
+                            </Box>
+                        ) : null}
+                    </ChatTab>
                 )}
             </>
         );

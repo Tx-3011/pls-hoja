@@ -7,12 +7,13 @@ import {
     Stack,
     Divider,
     Paper,
-    IconButton
+    IconButton,
+    CircularProgress
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
-const ChatTab = ({ messages, onSendMessage, onReset, children }) => {
+const ChatTab = ({ messages, onSendMessage, onReset, children, isBusy = false }) => {
     const [draft, setDraft] = useState('');
     const messagesEndRef = useRef(null);
 
@@ -136,13 +137,15 @@ const ChatTab = ({ messages, onSendMessage, onReset, children }) => {
                     />
                     <Button
                         variant="contained"
-                        endIcon={<SendIcon />}
+                        endIcon={
+                            isBusy ? <CircularProgress size={18} color="inherit" /> : <SendIcon />
+                        }
                         onClick={handleSend}
-                        disabled={!draft.trim()}
+                        disabled={!draft.trim() || isBusy}
                         sx={{ mt: 1.5, borderRadius: 2 }}
                         fullWidth
                     >
-                        Send
+                        {isBusy ? 'Working…' : 'Send'}
                     </Button>
                 </Box>
             </Box>
