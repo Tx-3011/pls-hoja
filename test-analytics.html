@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics API Test</title>
+</head>
+<body>
+    <h1>GraphicWalker Analytics API Test</h1>
+    
+    <div>
+        <h2>Test Analytics Endpoints</h2>
+        <button onclick="testKPIs()">Test KPIs</button>
+        <button onclick="testSummary()">Test Summary</button>
+        
+        <div id="results" style="margin-top: 20px; padding: 20px; border: 1px solid #ccc; background: #f9f9f9;">
+            <h3>Results will appear here...</h3>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5246';
+        const DATASET_NAME = 'Sample Dataset';
+        
+        async function testKPIs() {
+            try {
+                const response = await fetch(`${API_BASE}/api/analytics/kpis?datasetName=${encodeURIComponent(DATASET_NAME)}`);
+                const data = await response.json();
+                
+                document.getElementById('results').innerHTML = `
+                    <h3>KPIs Results:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('results').innerHTML = `
+                    <h3>KPIs Error:</h3>
+                    <p style="color: red;">${error.message}</p>
+                `;
+            }
+        }
+        
+        async function testSummary() {
+            try {
+                const response = await fetch(`${API_BASE}/api/analytics/summary?datasetName=${encodeURIComponent(DATASET_NAME)}`);
+                const data = await response.json();
+                
+                document.getElementById('results').innerHTML = `
+                    <h3>Summary Results:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('results').innerHTML = `
+                    <h3>Summary Error:</h3>
+                    <p style="color: red;">${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
