@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Box, Container, CircularProgress, Typography } from '@mui/material';
-import { GraphicRenderer } from '@kanaries/graphic-walker';
 import { 
     AppHeader, 
     TabNavigation, 
@@ -23,20 +22,37 @@ const Chart = ({ themeMode, toggleTheme }) => {
         isLoading,
         setIsLoading,
         fetchData,
-        handleDatasetChange,
+        handleDatasetChange: updateDatasetSelection,
         processExcelData,
         processStoredProcedureData
     } = useDataManager();
 
     const [experienceMode, setExperienceMode] = useState('simple');
-    const [chatMessages, setChatMessages] = useState(() => ([
-        {
-            role: 'bot',
-            text: "Hi there! Ask me for a chart and I'll get right on it."
-        }
-    ]));
-    const [chatPreview, setChatPreview] = useState(null);
-    const [isGeneratingChat, setIsGeneratingChat] = useState(false);
+    const [chatState, setChatState] = useState({
+        messages: [
+            {
+                id: 'welcome',
+                role: 'assistant',
+                content: 'Select a dataset and ask for a chart. I will translate your request into a visualization.'
+            }
+        ],
+        preferredChartType: 'auto',
+        isProcessing: false,
+        activeChart: null,
+        notes: [],
+        explanation: ''
+    });
+
+    const handleDatasetChange = useCallback((value) => {
+        updateDatasetSelection(value);
+        setChatState(prev => ({
+            ...prev,
+            activeChart: null,
+            notes: [],
+            explanation: '',
+            isProcessing: false
+        }));
+    }, [updateDatasetSelection]);
 
     useEffect(() => {
         fetchData(ENDPOINTS.DATASET);
@@ -78,6 +94,101 @@ const Chart = ({ themeMode, toggleTheme }) => {
         }
     }, [state.datasets.items, processExcelData, processStoredProcedureData, setIsLoading, setState]);
 
+    const handleChatTypeSelect = useCallback((type) => {
+        setChatState(prev => ({
+            ...prev,
+            preferredChartType: type
+        }));
+    }, []);
+
+    const handleSendChatMessage = useCallback(async (message) => {
+        const trimmed = message.trim();
+        if (!trimmed) {
+            return;
+        }
+
+        const userMessage = {
+            id: `user-${Date.now()}`,
+            role: 'user',
+            content: trimmed
+        };
+
+        setChatState(prev => ({
+            ...prev,
+            messages: [...prev.messages, userMessage],
+            isProcessing: true
+        }));
+
+        try {
+            const datasetName = state.selectedDataset;
+            if (!datasetName) {
+                throw new Error('Please select a dataset before asking for a chart.');
+            }
+
+            let workingData = state.gwData;
+            if (!workingData) {
+                workingData = await loadDataset(datasetName, { updateSelection: false });
+            }
+
+            if (!workingData) {
+                throw new Error('I could not load the dataset. Try again after loading it manually.');
+            }
+
+            const options = {};
+            if (chatState.preferredChartType && chatState.preferredChartType !== 'auto') {
+                options.preferredChartType = chatState.preferredChartType;
+            }
+
+            const result = generateChatChart(trimmed, workingData, options);
+
+            if (!result.success) {
+                const assistantMessage = {
+                    id: `assistant-${Date.now()}`,
+                    role: 'assistant',
+                    content: result.message
+                };
+
+                setChatState(prev => ({
+                    ...prev,
+                    messages: [...prev.messages, assistantMessage],
+                    isProcessing: false,
+                    activeChart: prev.activeChart,
+                    notes: [],
+                    explanation: ''
+                }));
+                return;
+            }
+
+            const assistantMessage = {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                content: result.explanation
+            };
+
+            setChatState(prev => ({
+                ...prev,
+                messages: [...prev.messages, assistantMessage],
+                isProcessing: false,
+                activeChart: result.chart,
+                notes: result.notes || [],
+                explanation: result.explanation
+            }));
+        } catch (error) {
+            console.error('Chat assistant error:', error);
+            const assistantMessage = {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                content: error.message || 'Something went wrong while generating the chart. Please try again.'
+            };
+
+            setChatState(prev => ({
+                ...prev,
+                messages: [...prev.messages, assistantMessage],
+                isProcessing: false
+            }));
+        }
+    }, [chatState.preferredChartType, loadDataset, state.gwData, state.selectedDataset]);
+
     const handleTabChange = (newTab) => {
         setState(prev => ({ ...prev, activeTab: newTab }));
     };
@@ -88,81 +199,6 @@ const Chart = ({ themeMode, toggleTheme }) => {
             setState(prev => ({ ...prev, activeTab: TABS.DESIGN }));
         }
     };
-
-    const handleOpenChatTab = () => {
-        setExperienceMode('advanced');
-        setState(prev => ({ ...prev, activeTab: TABS.CHAT }));
-    };
-
-    const handleSendChatMessage = useCallback(async (messageText) => {
-        const trimmed = messageText.trim();
-        if (!trimmed) return;
-
-        if (isGeneratingChat) {
-            return;
-        }
-
-        setChatMessages(prev => ([
-            ...prev,
-            { role: 'user', text: trimmed }
-        ]));
-
-        setIsGeneratingChat(true);
-
-        try {
-            let gwData = state.gwData;
-            if (!gwData && state.selectedDataset) {
-                gwData = await loadDataset(state.selectedDataset);
-            }
-
-            if (!gwData) {
-                setChatMessages(prev => ([
-                    ...prev,
-                    {
-                        role: 'bot',
-                        text: 'I need a dataset loaded before I can draft a chart. Try loading one from the Design tab first.'
-                    }
-                ]));
-                return;
-            }
-
-            const result = generateChatChart(trimmed, gwData);
-
-            if (result.success) {
-                setChatPreview(result.chart);
-                setChatMessages(prev => ([
-                    ...prev,
-                    { role: 'bot', text: result.explanation }
-                ]));
-            } else {
-                setChatMessages(prev => ([
-                    ...prev,
-                    { role: 'bot', text: result.message }
-                ]));
-            }
-        } catch (error) {
-            console.error('Failed to generate chat chart:', error);
-            setChatMessages(prev => ([
-                ...prev,
-                {
-                    role: 'bot',
-                    text: "Something went wrong while I was building that chart. Please try again or tweak the request."
-                }
-            ]));
-        } finally {
-            setIsGeneratingChat(false);
-        }
-    }, [isGeneratingChat, state.gwData, state.selectedDataset, loadDataset]);
-
-    const handleResetChat = useCallback(() => {
-        setChatPreview(null);
-        setChatMessages([
-            {
-                role: 'bot',
-                text: "Hi there! Ask me for a chart and I'll get right on it."
-            }
-        ]);
-    }, []);
 
     const handleDashboardAction = async (dashboard, action) => {
         if (action === 'view') {
@@ -208,89 +244,6 @@ const Chart = ({ themeMode, toggleTheme }) => {
 
     const refreshDashboards = () => {
         fetchData(ENDPOINTS.DASHBOARD);
-    };
-
-    const renderMainContent = () => {
-        if (experienceMode === 'simple') {
-            return (
-                <SimpleMode
-                    datasets={state.datasets.items}
-                    selectedDataset={state.selectedDataset}
-                    onDatasetChange={handleDatasetChange}
-                    analytics={state.analytics}
-                    gwData={state.gwData}
-                    isLoading={isLoading}
-                    onLoadDataset={loadDataset}
-                />
-            );
-        }
-
-        return (
-            <>
-                <TabNavigation
-                    activeTab={state.activeTab}
-                    onTabChange={handleTabChange}
-                />
-
-                {state.activeTab === TABS.DESIGN && (
-                    <DesignTab
-                        datasets={state.datasets.items}
-                        selectedDataset={state.selectedDataset}
-                        onDatasetChange={handleDatasetChange}
-                        gwData={state.gwData}
-                        isGraphicWalkerReady={isGraphicWalkerReady}
-                        onGraphicWalkerReady={setIsGraphicWalkerReady}
-                        isLoading={isLoading}
-                        setIsLoading={setIsLoading}
-                        onRefreshDashboards={refreshDashboards}
-                        onLoadDataset={loadDataset}
-                    />
-                )}
-
-                {state.activeTab === TABS.VIEW && (
-                    <ViewTab
-                        dashboards={state.dashboard.items}
-                        loading={state.dashboard.loading}
-                        error={state.dashboard.error}
-                        selectedDashboard={state.dashboard.selected}
-                        gwData={state.gwData}
-                        onDashboardAction={handleDashboardAction}
-                        onBackToList={resetDashboardView}
-                    />
-                )}
-
-                {state.activeTab === TABS.WIDGETS && (
-                    <AnalyticsTab
-                        analytics={state.analytics}
-                        selectedDataset={state.selectedDataset}
-                    />
-                )}
-
-                {state.activeTab === TABS.CHAT && (
-                    <ChatTab
-                        messages={chatMessages}
-                        onSendMessage={handleSendChatMessage}
-                        onReset={handleResetChat}
-                        isBusy={isGeneratingChat}
-                    >
-                        {chatPreview && state.gwData ? (
-                            <Box sx={{ width: '100%', maxWidth: '100%' }}>
-                                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                                    Suggested chart: {chatPreview.type === 'point' ? 'Scatter plot' : chatPreview.type.charAt(0).toUpperCase() + chatPreview.type.slice(1)}
-                                </Typography>
-                                <Box sx={{ width: '100%', height: 420 }}>
-                                    <GraphicRenderer
-                                        data={state.gwData.dataSource}
-                                        fields={state.gwData.fields}
-                                        chart={chatPreview.rendererChart}
-                                    />
-                                </Box>
-                            </Box>
-                        ) : null}
-                    </ChatTab>
-                )}
-            </>
-        );
     };
 
     // Loading state
@@ -353,11 +306,75 @@ const Chart = ({ themeMode, toggleTheme }) => {
                 toggleTheme={toggleTheme}
                 experienceMode={experienceMode}
                 onModeChange={handleExperienceModeChange}
-                onOpenChat={handleOpenChatTab}
             />
 
             <Container maxWidth="xl" sx={{ py: 3 }}>
-                {renderMainContent()}
+                {experienceMode === 'simple' ? (
+                    <SimpleMode
+                        datasets={state.datasets.items}
+                        selectedDataset={state.selectedDataset}
+                        onDatasetChange={handleDatasetChange}
+                        analytics={state.analytics}
+                        gwData={state.gwData}
+                        isLoading={isLoading}
+                        onLoadDataset={loadDataset}
+                    />
+                ) : (
+                    <>
+                        <TabNavigation 
+                            activeTab={state.activeTab} 
+                            onTabChange={handleTabChange} 
+                        />
+
+                        {state.activeTab === TABS.DESIGN && (
+                            <DesignTab
+                                datasets={state.datasets.items}
+                                selectedDataset={state.selectedDataset}
+                                onDatasetChange={handleDatasetChange}
+                                gwData={state.gwData}
+                                isGraphicWalkerReady={isGraphicWalkerReady}
+                                onGraphicWalkerReady={setIsGraphicWalkerReady}
+                                isLoading={isLoading}
+                                setIsLoading={setIsLoading}
+                                onRefreshDashboards={refreshDashboards}
+                                onLoadDataset={loadDataset}
+                            />
+                        )}
+
+                        {state.activeTab === TABS.VIEW && (
+                            <ViewTab
+                                dashboards={state.dashboard.items}
+                                loading={state.dashboard.loading}
+                                error={state.dashboard.error}
+                                selectedDashboard={state.dashboard.selected}
+                                gwData={state.gwData}
+                                onDashboardAction={handleDashboardAction}
+                                onBackToList={resetDashboardView}
+                            />
+                        )}
+
+                        {state.activeTab === TABS.WIDGETS && (
+                            <AnalyticsTab
+                                analytics={state.analytics}
+                                selectedDataset={state.selectedDataset}
+                            />
+                        )}
+
+                        {state.activeTab === TABS.CHAT && (
+                            <ChatTab
+                                datasets={state.datasets.items}
+                                selectedDataset={state.selectedDataset}
+                                onDatasetChange={handleDatasetChange}
+                                onLoadDataset={loadDataset}
+                                isLoading={isLoading}
+                                gwData={state.gwData}
+                                chatState={chatState}
+                                onPreferredChartChange={handleChatTypeSelect}
+                                onSendMessage={handleSendChatMessage}
+                            />
+                        )}
+                    </>
+                )}
             </Container>
         </Box>
     );

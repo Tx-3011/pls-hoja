@@ -1,182 +1,269 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
+import { GraphicRenderer } from '@kanaries/graphic-walker';
 import {
-    Box,
-    Typography,
-    TextField,
-    Button,
-    Stack,
-    Divider,
-    Paper,
-    IconButton,
-    CircularProgress
+	Box,
+	Card,
+	CardContent,
+	Typography,
+	Stack,
+	TextField,
+	IconButton,
+	ToggleButtonGroup,
+	ToggleButton,
+	Chip,
+	FormControl,
+	InputLabel,
+	Select,
+	MenuItem,
+	Button,
+	Divider,
+	Paper,
+	Alert,
+	CircularProgress,
+	Tooltip,
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
-import RefreshIcon from '@mui/icons-material/Refresh';
+import {
+	Send as SendIcon,
+	AutoAwesome as AutoIcon,
+	BarChart as BarIcon,
+	ShowChart as LineIcon,
+	ScatterPlot as ScatterIcon,
+	StackedBarChart as StackedIcon,
+	Timeline as AreaIcon,
+} from '@mui/icons-material';
 
-const ChatTab = ({ messages, onSendMessage, onReset, children, isBusy = false }) => {
-    const [draft, setDraft] = useState('');
-    const messagesEndRef = useRef(null);
+const chartTypeOptions = [
+	{ value: 'auto', label: 'Auto', icon: <AutoIcon fontSize="small" /> },
+	{ value: 'bar', label: 'Bar', icon: <BarIcon fontSize="small" /> },
+	{ value: 'line', label: 'Line', icon: <LineIcon fontSize="small" /> },
+	{ value: 'area', label: 'Area', icon: <AreaIcon fontSize="small" /> },
+	{ value: 'point', label: 'Scatter', icon: <ScatterIcon fontSize="small" /> },
+	{ value: 'stacked', label: 'Stacked', icon: <StackedIcon fontSize="small" /> },
+];
 
-    useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [messages]);
+const MessageBubble = ({ role, content }) => {
+	const isUser = role === 'user';
+	return (
+		<Box sx={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+			<Paper
+				elevation={0}
+				sx={{
+					px: 2,
+					py: 1.5,
+					maxWidth: '80%',
+					bgcolor: isUser ? 'primary.main' : 'background.paper',
+					color: isUser ? 'primary.contrastText' : 'text.primary',
+					borderRadius: 3,
+					borderTopRightRadius: isUser ? 0 : 24,
+					borderTopLeftRadius: isUser ? 24 : 0,
+					border: (theme) => `1px solid ${isUser ? theme.palette.primary.dark : theme.palette.divider}`,
+					whiteSpace: 'pre-wrap'
+				}}
+			>
+				{content}
+			</Paper>
+		</Box>
+	);
+};
 
-    const handleSend = () => {
-        const trimmed = draft.trim();
-        if (!trimmed) {
-            return;
-        }
+const ChatTab = ({
+	datasets,
+	selectedDataset,
+	onDatasetChange,
+	onLoadDataset,
+	isLoading,
+	gwData,
+	chatState,
+	onPreferredChartChange,
+	onSendMessage
+}) => {
+	const [draft, setDraft] = useState('');
 
-        onSendMessage(trimmed);
-        setDraft('');
-    };
+	const handleSubmit = async (event) => {
+		event.preventDefault();
+		const trimmed = draft.trim();
+		if (!trimmed || chatState?.isProcessing) return;
+		await onSendMessage(trimmed);
+		setDraft('');
+	};
 
-    const handleKeyDown = (event) => {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            handleSend();
-        }
-    };
+	const handleChartPreferenceChange = (_, value) => {
+		if (!value) return;
+		onPreferredChartChange(value);
+	};
 
-    return (
-        <Paper sx={{ p: { xs: 2, md: 3 }, display: 'flex', minHeight: '70vh' }} elevation={3}>
-            <Box
-                sx={{
-                    width: { xs: '100%', md: '28%' },
-                    borderRight: {
-                        xs: 'none',
-                        md: (theme) => `1px solid ${theme.palette.divider}`
-                    },
-                    pr: { xs: 0, md: 3 },
-                    mr: { xs: 0, md: 3 },
-                    display: 'flex',
-                    flexDirection: 'column',
-                    mb: { xs: 3, md: 0 }
-                }}
-            >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                    <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                            Chat Assistant
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            Ask for charts using natural language.
-                        </Typography>
-                    </Box>
-                    {onReset && (
-                        <IconButton size="small" onClick={onReset}>
-                            <RefreshIcon fontSize="small" />
-                        </IconButton>
-                    )}
-                </Box>
+	const hasDataset = Boolean(selectedDataset);
 
-                <Divider sx={{ mb: 2 }} />
+	const chartAvailable = useMemo(() => {
+		return Boolean(chatState?.activeChart && gwData && gwData.dataSource && gwData.fields);
+	}, [chatState?.activeChart, gwData]);
 
-                <Box sx={{ flex: 1, overflowY: 'auto', pr: 1 }}>
-                    <Stack spacing={1.5}>
-                        {messages.map((message, index) => (
-                            <Box
-                                key={`${message.role}-${index}`}
-                                sx={{
-                                    alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start',
-                                    maxWidth: '100%'
-                                }}
-                            >
-                                <Typography
-                                    variant="caption"
-                                    sx={{
-                                        color: 'text.secondary',
-                                        display: 'block',
-                                        mb: 0.5,
-                                        textTransform: 'capitalize'
-                                    }}
-                                >
-                                    {message.role}
-                                </Typography>
-                                <Box
-                                    sx={{
-                                        px: 2,
-                                        py: 1.5,
-                                        borderRadius: 2,
-                                        backgroundColor:
-                                            message.role === 'user'
-                                                ? (theme) => theme.palette.primary.main
-                                                : (theme) => theme.palette.action.hover,
-                                        color:
-                                            message.role === 'user'
-                                                ? (theme) => theme.palette.primary.contrastText
-                                                : 'text.primary',
-                                        boxShadow: (theme) =>
-                                            message.role === 'user'
-                                                ? '0 6px 14px rgba(25,118,210,0.18)'
-                                                : '0 4px 10px rgba(15,23,42,0.08)'
-                                    }}
-                                >
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                        {message.text}
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        ))}
-                        <span ref={messagesEndRef} />
-                    </Stack>
-                </Box>
+	return (
+		<Stack spacing={3}>
+			<Card>
+				<CardContent>
+					<Stack spacing={2}>
+						<Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+							Chat with your data
+							<Chip label={chatState?.preferredChartType === 'auto' ? 'Auto chart type' : `Prefers ${chatState?.preferredChartType}`} size="small" color="primary" variant="outlined" />
+						</Typography>
 
-                <Box sx={{ mt: 2 }}>
-                    <TextField
-                        label="Ask for a chart"
-                        placeholder="e.g. Compare total revenue by region"
-                        multiline
-                        minRows={2}
-                        value={draft}
-                        onChange={(event) => setDraft(event.target.value)}
-                        onKeyDown={handleKeyDown}
-                        fullWidth
-                    />
-                    <Button
-                        variant="contained"
-                        endIcon={
-                            isBusy ? <CircularProgress size={18} color="inherit" /> : <SendIcon />
-                        }
-                        onClick={handleSend}
-                        disabled={!draft.trim() || isBusy}
-                        sx={{ mt: 1.5, borderRadius: 2 }}
-                        fullWidth
-                    >
-                        {isBusy ? 'Working…' : 'Send'}
-                    </Button>
-                </Box>
-            </Box>
+						<Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>
+							<FormControl fullWidth size="small">
+								<InputLabel id="chat-dataset-label">Dataset</InputLabel>
+								<Select
+									labelId="chat-dataset-label"
+									label="Dataset"
+									value={selectedDataset}
+									onChange={(event) => onDatasetChange(event.target.value)}
+								>
+									<MenuItem value="">
+										<em>Select a dataset</em>
+									</MenuItem>
+									{datasets.map((dataset) => (
+										<MenuItem key={dataset.datasetName} value={dataset.datasetName}>
+											{dataset.datasetName}
+										</MenuItem>
+									))}
+								</Select>
+							</FormControl>
 
-            <Divider orientation="vertical" flexItem sx={{ mx: { xs: 0, md: 2 }, display: { xs: 'none', md: 'block' } }} />
+							<Tooltip title={hasDataset ? 'Reload the dataset into memory' : 'Choose a dataset first'}>
+								<span>
+									<Button
+										variant="outlined"
+										onClick={async () => {
+											if (!hasDataset || isLoading) return;
+											try {
+												await onLoadDataset(selectedDataset, { updateSelection: true });
+											} catch (error) {
+												console.error('Failed to load dataset for chat tab:', error);
+											}
+										}}
+										disabled={!hasDataset || isLoading}
+									>
+										{isLoading ? 'Loading…' : 'Load dataset'}
+									</Button>
+								</span>
+							</Tooltip>
 
-            <Box
-                sx={{
-                    flex: 1,
-                    mt: { xs: 3, md: 0 },
-                    backgroundColor: (theme) => theme.palette.background.default,
-                    borderRadius: 2,
-                    border: (theme) => `1px dashed ${theme.palette.divider}`,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    p: { xs: 2, md: 4 },
-                    minHeight: { xs: '40vh', md: 'auto' }
-                }}
-            >
-                {children ? (
-                    children
-                ) : (
-                    <Typography variant="body1" color="text.secondary" align="center">
-                        Generated charts will appear here once the assistant has created them.
-                    </Typography>
-                )}
-            </Box>
-        </Paper>
-    );
+							<ToggleButtonGroup
+								exclusive
+								size="small"
+								value={chatState?.preferredChartType || 'auto'}
+								onChange={handleChartPreferenceChange}
+								aria-label="Preferred chart type"
+							>
+								{chartTypeOptions.map((option) => (
+									<ToggleButton key={option.value} value={option.value} aria-label={option.label}>
+										<Stack direction="row" spacing={1} alignItems="center">
+											{option.icon}
+											<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+												{option.label}
+											</Box>
+										</Stack>
+									</ToggleButton>
+								))}
+							</ToggleButtonGroup>
+						</Stack>
+					</Stack>
+				</CardContent>
+			</Card>
+
+			<Card sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, gap: 2 }}>
+				<CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+					<Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+						Conversation
+					</Typography>
+					<Divider />
+
+					<Stack spacing={1.5} sx={{ flex: 1, overflowY: 'auto', maxHeight: 320, pr: 1 }}>
+						{(chatState?.messages || []).map((message) => (
+							<MessageBubble key={message.id} role={message.role} content={message.content} />
+						))}
+					</Stack>
+
+					{chatState?.notes && chatState.notes.length > 0 && (
+						<Alert severity="info" variant="outlined">
+							<Stack spacing={1}>
+								<Typography variant="subtitle2">Adjustments I made</Typography>
+								<ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
+									{chatState.notes.map((note, index) => (
+										<li key={index}>{note}</li>
+									))}
+								</ul>
+							</Stack>
+						</Alert>
+					)}
+
+					<Box component="form" onSubmit={handleSubmit} sx={{ mt: 'auto' }}>
+						<TextField
+							fullWidth
+							value={draft}
+							onChange={(event) => setDraft(event.target.value)}
+							placeholder={hasDataset ? 'Ask for a chart, e.g. “Compare revenue by region”' : 'Select a dataset to start chatting'}
+							multiline
+							minRows={2}
+							disabled={chatState?.isProcessing}
+							InputProps={{
+								endAdornment: (
+									<IconButton
+										type="submit"
+										color="primary"
+										disabled={!draft.trim() || chatState?.isProcessing}
+										sx={{ alignSelf: 'flex-end' }}
+									>
+										{chatState?.isProcessing ? <CircularProgress size={20} /> : <SendIcon />}
+									</IconButton>
+								)
+							}}
+						/>
+					</Box>
+				</CardContent>
+
+				<Divider flexItem orientation="vertical" sx={{ display: { xs: 'none', lg: 'block' } }} />
+
+				<CardContent sx={{ flex: 1 }}>
+					<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+						Chart Preview
+					</Typography>
+					{chatState?.isProcessing && !gwData && (
+						<Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+							<CircularProgress />
+						</Box>
+					)}
+					{chartAvailable ? (
+						<Box sx={{ height: 360 }}>
+							<GraphicRenderer
+								data={gwData.dataSource}
+								fields={gwData.fields}
+								chart={chatState.activeChart.rendererChart}
+							/>
+						</Box>
+					) : (
+						<Box
+							sx={{
+								border: (theme) => `1px dashed ${theme.palette.divider}`,
+								borderRadius: 2,
+								minHeight: 320,
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+								textAlign: 'center',
+								px: 3
+							}}
+						>
+							<Typography variant="body2" color="text.secondary">
+								{hasDataset
+									? 'Ask the assistant for a visualization to see it appear here.'
+									: 'Select a dataset and ask for a chart to see the preview.'}
+							</Typography>
+						</Box>
+					)}
+				</CardContent>
+			</Card>
+		</Stack>
+	);
 };
 
 export default ChatTab;
